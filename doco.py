@@ -4,15 +4,22 @@ import re, json
 from time import sleep
 import RPi.GPIO as GPIO
 
+#Name GPIO-Pins
 GARAGE_UP = 23
 GARAGE_DOWN = 24
 GARAGE_IMPULSE = 25
 GARAGE_CLIMATE = 8
 
+GARAGE_IS_OPENED = 17
+GARAGE_IS_CLOSED = 27
+
 FENCE_OPEN = 7
 FENCE_CLOSE = 1
 FENCE_IMPULSE = 12
 FENCE_HALF = 16
+
+FENCE_IS_OPENED = 10
+FENCE_IS_CLOSED = 9
 
 INTERVAL = 0.1
 
@@ -30,6 +37,11 @@ def _initialize():
   GPIO.setup(FENCE_CLOSE, GPIO.OUT)
   GPIO.setup(FENCE_IMPULSE, GPIO.OUT)
   GPIO.setup(FENCE_HALF, GPIO.OUT)
+  
+  GPIO.setup(GARAGE_IS_OPENED, GPIO.IN)
+  GPIO.setup(GARAGE_IS_CLOSED, GPIO.IN)
+  GPIO.setup(FENCE_IS_OPENED, GPIO.IN)
+  GPIO.setup(FENCE_IS_CLOSED, GPIO.IN)
 
   GPIO.output(GARAGE_UP,GPIO.HIGH)
   GPIO.output(GARAGE_DOWN,GPIO.HIGH)
@@ -47,6 +59,27 @@ def _control(command):
   GPIO.output(command, GPIO.LOW)
   sleep(INTERVAL)
   GPIO.output(command, GPIO.HIGH)
+
+def _read(gate):
+  if gate == "garage":
+    is_opened = GPIO.input(GARAGE_IS_OPENED)
+    is_closed = GPIO.input(GARAGE_IS_CLOSED)
+  elif gate == "fence":
+    is_opened = GPIO.input(FENCE_IS_OPENED)
+    is_closed = GPIO.input(FENCE_IS_CLOSED)
+  else:
+    is_opened = False
+    is_closed = False
+  
+  return _evaluate_door_position(is_opened, is_closed)
+
+def _evaluate_door_position(is_opened, is_closed):
+  if is_opened and not is_closed:
+    return 'up'
+  elif not is_opened and is_closed:
+    return 'down'
+  else:
+    return 'somewhere'
 
 @post('/move')
 def move():
@@ -130,6 +163,61 @@ def move():
   return;
 
 
+@post('/get')
+def get():
+
+  #read JSON Content
+  try:
+    try:
+      data = request.json
+    except:
+      raise ValueError
+    if data is None:
+      raise ValueError
+
+    if data['token'] is None:
+      raise ValueError
+    else:
+      token = data['token']
+
+    if data['gate'] is None:
+      raise ValueError
+    else:
+      gate = data['gate']
+
+  except ValueError:
+    response.status = 400
+    return
+
+  #validate content
+  try:
+    if my_token is None:
+      response.status = 500
+      raise
+    elif my_token == "":
+      response.status = 500
+      raise
+    elif my_token != token:
+      response.status = 403
+      raise
+
+    if not (gate == "garage" or gate == "fence"):
+      response.status = 400
+      raise
+
+    if gate == "garage" or gate == "fence":
+      position = { 'position': _read(gate) }
+      return position
+
+    else:
+      response.status = 400
+      raise
+
+  except:
+    return
+
+  response.status = 200
+  return;
 
 #Main
 _initialize()
