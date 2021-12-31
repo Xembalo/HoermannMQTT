@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
+from typing import SupportsRound
 from bottle import post, template, get, route, run, request, response
 import re, json
 from time import sleep
 import RPi.GPIO as GPIO
+import paho.mqtt.client as mqtt
+import json
+import sys
+import argparse
+
+
 
 #Name GPIO-Pins
 GARAGE_UP = 23
@@ -23,37 +30,37 @@ FENCE_IS_CLOSED = 9
 
 INTERVAL = 0.1
 
-def _initialize():
-  global my_token
+def initialize_gpio():
+  try: 
+    GPIO.setwarnings(False)
+    GPIO.setmode(GPIO.BCM)
 
-  GPIO.setwarnings(False)
-  GPIO.setmode(GPIO.BCM)
+    GPIO.setup(GARAGE_UP, GPIO.OUT)
+    GPIO.setup(GARAGE_DOWN, GPIO.OUT)
+    GPIO.setup(GARAGE_IMPULSE, GPIO.OUT)
+    GPIO.setup(GARAGE_CLIMATE, GPIO.OUT)
+    GPIO.setup(FENCE_OPEN, GPIO.OUT)
+    GPIO.setup(FENCE_CLOSE, GPIO.OUT)
+    GPIO.setup(FENCE_IMPULSE, GPIO.OUT)
+    GPIO.setup(FENCE_HALF, GPIO.OUT)
+    
+    GPIO.setup(GARAGE_IS_OPENED, GPIO.IN)
+    GPIO.setup(GARAGE_IS_CLOSED, GPIO.IN)
+    GPIO.setup(FENCE_IS_OPENED, GPIO.IN)
+    GPIO.setup(FENCE_IS_CLOSED, GPIO.IN)
 
-  GPIO.setup(GARAGE_UP, GPIO.OUT)
-  GPIO.setup(GARAGE_DOWN, GPIO.OUT)
-  GPIO.setup(GARAGE_IMPULSE, GPIO.OUT)
-  GPIO.setup(GARAGE_CLIMATE, GPIO.OUT)
-  GPIO.setup(FENCE_OPEN, GPIO.OUT)
-  GPIO.setup(FENCE_CLOSE, GPIO.OUT)
-  GPIO.setup(FENCE_IMPULSE, GPIO.OUT)
-  GPIO.setup(FENCE_HALF, GPIO.OUT)
-  
-  GPIO.setup(GARAGE_IS_OPENED, GPIO.IN)
-  GPIO.setup(GARAGE_IS_CLOSED, GPIO.IN)
-  GPIO.setup(FENCE_IS_OPENED, GPIO.IN)
-  GPIO.setup(FENCE_IS_CLOSED, GPIO.IN)
+    GPIO.output(GARAGE_UP,GPIO.HIGH)
+    GPIO.output(GARAGE_DOWN,GPIO.HIGH)
+    GPIO.output(GARAGE_IMPULSE,GPIO.HIGH)
+    GPIO.output(GARAGE_CLIMATE,GPIO.HIGH)
+    GPIO.output(FENCE_OPEN,GPIO.HIGH)
+    GPIO.output(FENCE_CLOSE,GPIO.HIGH)
+    GPIO.output(FENCE_IMPULSE,GPIO.HIGH)
+    GPIO.output(FENCE_HALF,GPIO.HIGH)
 
-  GPIO.output(GARAGE_UP,GPIO.HIGH)
-  GPIO.output(GARAGE_DOWN,GPIO.HIGH)
-  GPIO.output(GARAGE_IMPULSE,GPIO.HIGH)
-  GPIO.output(GARAGE_CLIMATE,GPIO.HIGH)
-  GPIO.output(FENCE_OPEN,GPIO.HIGH)
-  GPIO.output(FENCE_CLOSE,GPIO.HIGH)
-  GPIO.output(FENCE_IMPULSE,GPIO.HIGH)
-  GPIO.output(FENCE_HALF,GPIO.HIGH)
-
-  f = open("/srv/www/doco/my_token.tok", "r")
-  my_token = str.strip(f.read())
+    return True
+  except:
+    return False
 
 def _control(command):
   GPIO.output(command, GPIO.LOW)
@@ -220,5 +227,67 @@ def get():
   return;
 
 #Main
-_initialize()
-run(host='0.0.0.0', port=8080)
+
+
+
+def main():
+    global MQTT_CLIENT_IDENTIFIER
+    global MQTT_TOPIC
+    global MQTT_BROKER_ADDRESS
+    global MQTT_PORT
+    global MQTT_USER
+    global MQTT_PASS
+    global MQTT_QOS
+
+    parser = argparse.ArgumentParser(
+            description="MQTT-Client for Hörmann garage door using an Raspberry Pi and Hörmann Universaladapterplatine UAP-1-HCP. Pushes current state and reads commands", 
+            epilog="Report bugs, comments or improvements to https://github.com/Xembalo/DoorControlWS",
+            usage="%(prog)s [options]")
+    
+    parser.add_argument("--mqtt_client_identifier", help="MQTT client identifier", metavar='identifier', required=True)
+    #parser.add_argument("--mqtt_topic",             help="Topic for stats", metavar='topic')
+    parser.add_argument("--mqtt_host",              help="Host or IP of your mqtt broker (e.g. localhost)", metavar='host/ip', required=True)
+    parser.add_argument("--mqtt_port",              type=int, default=1883, help="port of your mqtt broker (default: %(default)s)", metavar='port')
+    parser.add_argument("--mqtt_user",              help="Username for your mqtt broker", metavar='username')
+    parser.add_argument("--mqtt_pass",              help="Password for your mqtt broker", metavar='password')
+    
+    args = parser.parse_args()
+
+    MQTT_CLIENT_IDENTIFIER      = args.mqtt_client_identifier
+    #MQTT_TOPIC                  = args.mqtt_topic
+    MQTT_BROKER_ADDRESS         = args.mqtt_host
+    MQTT_PORT                   = args.mqtt_port
+    MQTT_USER                   = args.mqtt_user
+    MQTT_PASS                   = args.mqtt_pass
+    
+    MQTT_QOS                    = 0
+
+    #initialize gpio ports
+    success = initialize_gpio()
+    if not success:
+        print("GPIO ports cannot initialized")
+        sys.exit()
+
+
+    client = mqtt.Client(MQTT_CLIENT_IDENTIFIER)
+    if MQTT_USER != "":
+        client.username_pw_set(username=MQTT_USER,password=MQTT_PASS)
+
+    try:
+        client.connect(MQTT_BROKER_ADDRESS, MQTT_PORT) 
+    except:
+        print("MQTT connection failed")
+        sys.exit()
+
+    #pushMqttConfig(client, model, sn, sw_version)
+
+    #batteryavg, pv1avg, pv2avg, demandavg, feedingridavg, consumptiongridavg, tempavg, feedinbatteryavg, demandbatteryavg = calcStats(session)
+    
+    #pushMqttStats(client, now, batteryavg, pv1avg, pv2avg, demandavg, feedingridavg, consumptiongridavg, tempavg, feedinbatteryavg, demandbatteryavg)
+    client.disconnect() # disconnect
+
+    run(host='0.0.0.0', port=8080)
+
+if __name__ == "__main__":
+   main()
+
