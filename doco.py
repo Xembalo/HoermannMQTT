@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from typing import SupportsRound
-from bottle import post, template, get, route, run, request, response
 import re, json
 from time import sleep
 import RPi.GPIO as GPIO
@@ -88,22 +87,10 @@ def _evaluate_door_position(is_opened, is_closed):
   else:
     return 'somewhere'
 
-@post('/move')
-def move():
+def move(data):
 
   #read JSON Content
   try:
-    try:
-      data = request.json
-    except:
-      raise ValueError
-    if data is None:
-      raise ValueError
-
-    if data['token'] is None:
-      raise ValueError
-    else:
-      token = data['token']
 
     if data['gate'] is None:
       raise ValueError
@@ -116,23 +103,11 @@ def move():
       dir = data['direction']
 
   except ValueError:
-    response.status = 400
     return
 
   #validate content
   try:
-    if my_token is None:
-      response.status = 500
-      raise
-    elif my_token == "":
-      response.status = 500
-      raise
-    elif my_token != token:
-      response.status = 403
-      raise
-
     if not (gate == "garage" or gate == "fence"):
-      response.status = 400
       raise
 
     if gate == "garage":
@@ -145,7 +120,6 @@ def move():
       elif dir == "climate":
         _control(GARAGE_CLIMATE)
       else:
-        response.status = 400
         raise
     elif gate == "fence":
       if dir == "open":
@@ -157,35 +131,20 @@ def move():
       elif dir == "half":
         _control(FENCE_HALF)
       else:
-        response.status = 400
         raise
     else:
-      response.status = 400
       raise
 
   except:
     return
 
-  response.status = 200
-  return;
 
-
-@post('/get')
-def get():
+def get(data):
 
   #read JSON Content
   try:
-    try:
-      data = request.json
-    except:
-      raise ValueError
     if data is None:
       raise ValueError
-
-    if data['token'] is None:
-      raise ValueError
-    else:
-      token = data['token']
 
     if data['gate'] is None:
       raise ValueError
@@ -193,23 +152,11 @@ def get():
       gate = data['gate']
 
   except ValueError:
-    response.status = 400
     return
 
   #validate content
   try:
-    if my_token is None:
-      response.status = 500
-      raise
-    elif my_token == "":
-      response.status = 500
-      raise
-    elif my_token != token:
-      response.status = 403
-      raise
-
     if not (gate == "garage" or gate == "fence"):
-      response.status = 400
       raise
 
     if gate == "garage" or gate == "fence":
@@ -217,19 +164,12 @@ def get():
       return position
 
     else:
-      response.status = 400
       raise
 
   except:
     return
 
-  response.status = 200
-  return;
-
 #Main
-
-
-
 def main():
     global MQTT_CLIENT_IDENTIFIER
     global MQTT_TOPIC
@@ -285,8 +225,6 @@ def main():
     
     #pushMqttStats(client, now, batteryavg, pv1avg, pv2avg, demandavg, feedingridavg, consumptiongridavg, tempavg, feedinbatteryavg, demandbatteryavg)
     client.disconnect() # disconnect
-
-    run(host='0.0.0.0', port=8080)
 
 if __name__ == "__main__":
    main()
