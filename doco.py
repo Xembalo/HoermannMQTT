@@ -7,8 +7,17 @@ import paho.mqtt.client as mqtt
 import json
 import sys
 import argparse
+import signal
 
-
+#global Variables
+loopEnabled = True
+MQTT_CLIENT_IDENTIFIER = ""
+MQTT_TOPIC = ""
+MQTT_BROKER_ADDRESS = ""
+MQTT_PORT = 0
+MQTT_USER = ""
+MQTT_PASS = ""
+MQTT_QOS = 0
 
 #Name GPIO-Pins
 GARAGE_UP = 23
@@ -169,8 +178,20 @@ def get(data):
   except:
     return
 
-#Main
-def main():
+def mqttOnConnect(client, userdata, flags, rc):
+    if rc==0:
+        client.connected_flag = True
+    
+def mqttOnDisconnect(client, userdata, rc):
+    client.connected_flag = False
+    client.loop_stop()
+
+def signal_handler(signal, frame):
+    global loopEnabled
+    loopEnabled = False
+
+
+def parseArguments():
     global MQTT_CLIENT_IDENTIFIER
     global MQTT_TOPIC
     global MQTT_BROKER_ADDRESS
@@ -178,6 +199,7 @@ def main():
     global MQTT_USER
     global MQTT_PASS
     global MQTT_QOS
+
 
     parser = argparse.ArgumentParser(
             description="MQTT-Client for Hörmann garage door using an Raspberry Pi and Hörmann Universaladapterplatine UAP-1-HCP. Pushes current state and reads commands", 
@@ -202,29 +224,65 @@ def main():
     
     MQTT_QOS                    = 0
 
+def main():
+
+    parseArguments()
+
     #initialize gpio ports
     success = initialize_gpio()
     if not success:
         print("GPIO ports cannot initialized")
         sys.exit()
 
+    #Signal Handler for interrupting the loop
+    signal.signal(signal.SIGINT, signal_handler)        
+
+    mqtt.Client.connected_flag = False
+    mqtt.Client.sent_configuration_flag = False
 
     client = mqtt.Client(MQTT_CLIENT_IDENTIFIER)
+    client.on_connect = mqttOnConnect
+    client.on_disconnect = mqttOnDisconnect
+
     if MQTT_USER != "":
         client.username_pw_set(username=MQTT_USER,password=MQTT_PASS)
-
     try:
         client.connect(MQTT_BROKER_ADDRESS, MQTT_PORT) 
     except:
         print("MQTT connection failed")
         sys.exit()
 
-    #pushMqttConfig(client, model, sn, sw_version)
+    client.will_set(MQTT_TOPIC + "/state","offline",MQTT_QOS,retain=True)
 
-    #batteryavg, pv1avg, pv2avg, demandavg, feedingridavg, consumptiongridavg, tempavg, feedinbatteryavg, demandbatteryavg = calcStats(session)
-    
-    #pushMqttStats(client, now, batteryavg, pv1avg, pv2avg, demandavg, feedingridavg, consumptiongridavg, tempavg, feedinbatteryavg, demandbatteryavg)
-    client.disconnect() # disconnect
+    while loopEnabled:
+
+         #creates mqtt client if nessessary 
+        if not client.connected_flag:
+            client.loop_start()
+            
+            try:
+                client.connect(MQTT_BROKER_ADDRESS, MQTT_PORT) 
+            except:
+                #if connection was not successful, try it in next loop again
+                print("connection was not successful, try it in next loop again")
+                pass
+
+        batteryavg, pv1avg, pv2avg, demandavg, feedingridavg, consumptiongridavg, tempavg, feedinbatteryavg, demandbatteryavg = calcStats(session)
+
+        #push to mqtt and quits connection
+        if  client.connected_flag: 
+            if not client.sent_configuration_flag:
+                pushMqttConfig(client, model, sn, sw_version)
+                client.sent_configuration_flag = True
+
+            pushMqttStats(client, now, batteryavg, pv1avg, pv2avg, demandavg, feedingridavg, consumptiongridavg, tempavg, feedinbatteryavg, demandbatteryavg)
+        
+        time.sleep(30.0 - time.time() % 30.0)
+
+    #send last message
+    client.publish(MQTT_TOPIC + "/state", "offline", qos=MQTT_QOS, retain=True)
+    client.loop_stop()  
+    client.disconnect() 
 
 if __name__ == "__main__":
    main()
