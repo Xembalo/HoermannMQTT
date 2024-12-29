@@ -1,0 +1,9 @@
+basti@GaragenPi:/srv/www $ sudo systemctl status doco.service
+● doco.service - Door Control Web Service
+     Loaded: loaded (/etc/systemd/system/doco.service; enabled; vendor preset: enabled)
+     Active: active (running) since Thu 2022-12-29 16:12:24 CET; 1min 59s ago
+   Main PID: 2292 (python3)
+      Tasks: 2 (limit: 991)
+        CPU: 5.574s
+     CGroup: /system.slice/doco.service
+             └─2292 python3 /srv/www/doco/doco.py

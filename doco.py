@@ -1,37 +1,26 @@
 #!/usr/bin/env python3
-import json
+
 import time
 import RPi.GPIO as GPIO
 import paho.mqtt.client as mqtt
-import sys
 import signal
+import logging
+import json
+import sys
+
+from logging.handlers import TimedRotatingFileHandler
 from gpiozero import CPUTemperature
 from pathlib import Path
 
-import logging
 from logging.handlers import TimedRotatingFileHandler
 
-FORMATTER = logging.Formatter("%(asctime)s — %(name)s — %(levelname)s — %(message)s")
-LOG_FILE = "my_app.log"
-
-def get_console_handler():
-   console_handler = logging.StreamHandler(sys.stdout)
-   console_handler.setFormatter(FORMATTER)
-   return console_handler
-
-def get_file_handler():
-   file_handler = TimedRotatingFileHandler(LOG_FILE, when="s", interval=10, backupCount=5)
-   file_handler.setFormatter(FORMATTER)
-   return file_handler
-
-def get_logger(logger_name):
-   logger = logging.getLogger(logger_name)
-   logger.setLevel(logging.DEBUG) # better to have too much log than not enough
-   logger.addHandler(get_console_handler())
-   logger.addHandler(get_file_handler())
-   # with this pattern, it's rarely necessary to propagate the error up to parent
-   logger.propagate = False
-   return logger
+def configureLogger() -> None:
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    handler = TimedRotatingFileHandler(Path(__file__).with_suffix(".log"), when="midnight", interval=1, backupCount=7, encoding="utf-8")
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 #global Variables
 loopEnabled = True
@@ -141,8 +130,6 @@ def moveDoor(door: str, command: str):
 
 def printStat(stats: tuple) -> None:
     print("State: " + stats["state"] + ", Position: " + str(stats["position"]) + ", Command: " + stats["command"] + ", Sec after last command: " + str(round(stats["last_command_time"], 1)))
-    #my_logger = get_logger("printStat")
-   # my_logger.debug("State: " + stats["state"] + ", Position: " + str(stats["position"]) + ", Command: " + stats["command"] + ", Sec after last command: " + str(round(stats["last_command_time"], 1)))
 
 def calculateDoorPosition(door: str) -> tuple[str, int]:
     global STAT_CACHE
@@ -630,8 +617,8 @@ def getMovingTimes():
 
 def main():
 
-    #my_logger = get_logger("my module name")
-    #my_logger.debug("a debug message")
+    configureLogger()
+
     if not read_config():
         print("Config file not present or broken")
         sys.exit()
