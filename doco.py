@@ -11,8 +11,12 @@ import sys
 from logging.handlers import TimedRotatingFileHandler
 from gpiozero import CPUTemperature
 from pathlib import Path
-
 from logging.handlers import TimedRotatingFileHandler
+
+#global Variables
+loopEnabled = True
+CONFIG = {}
+STAT_CACHE = {}
 
 def configureLogger() -> None:
     logger = logging.getLogger()
@@ -22,14 +26,12 @@ def configureLogger() -> None:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
-#global Variables
-loopEnabled = True
-CONFIG = {}
-STAT_CACHE = {}
-
 #handle ctrl+c in terminal session
-def signal_handler(signal, frame):
+def signalHandler(signal, frame):
     global loopEnabled
+    logging.debug("Got quit signal")
+    #print to stdout for user
+    print("Got quit signal, cleaning up...")
     loopEnabled = False
 
 def initialize_gpio():
